@@ -17,6 +17,6 @@ services:
       - key: MEGA_COOKIE_SECURE
         value: '1'
       - key: MEGA_OWNER_USERNAME
-        value: Yenilikzamanı
+        value: 'Mega Fav'
       - key: MEGA_OWNER_PASSWORD
         sync: false
