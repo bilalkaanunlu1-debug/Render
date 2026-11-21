@@ -223,8 +223,9 @@ def dashboard_stats(db_path, active_members):
                                 FROM x_list_posts WHERE posted_at >= ? AND posted_at < ?""", (start,end)).fetchone()
     count = result['n'] or 0
     with _connect(db_path) as con:
-        recent = con.execute('''SELECT post_id,url,x_handle,period,posted_at,imported_at
-                                FROM x_list_posts ORDER BY imported_at DESC,post_id DESC LIMIT 15''').fetchall()
+        recent_rows = con.execute('''SELECT post_id,url,x_handle,period,posted_at,imported_at
+                                     FROM x_list_posts ORDER BY imported_at DESC,post_id DESC LIMIT 15''').fetchall()
+        recent = [dict(row, local_day=datetime.fromisoformat(row['posted_at'].replace('Z', '+00:00')).astimezone(TR).date().isoformat()) for row in recent_rows]
         saved_total = con.execute('SELECT COUNT(*) FROM x_list_posts').fetchone()[0]
     return {'x_today_count': count, 'x_saved_total': saved_total, 'x_recent_posts': recent,
             'x_posts_per_member': round(count / active_members, 2) if active_members else 0,
