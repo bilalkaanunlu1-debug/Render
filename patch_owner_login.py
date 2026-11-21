@@ -39,5 +39,24 @@ diag = """        owner_record = conn.execute('SELECT username, password_hash, a
             bool(owner_record and owner_record['active'])), flush=True)
 """
 s = s.replace(needle, needle + diag)
+# On a one-time Render-only password reset, preserve all other database records.
+needle = "        if row is None and initial_password:\n"
+assert s.count(needle) == 1, 'Unexpected owner initialization structure'
+reset_block = """        reset_password = os.environ.get('MEGA_OWNER_PASSWORD_RESET', '')
+        if row is not None and reset_password:
+            if len(reset_password) < 16:
+                raise RuntimeError('Kurucu sifre sifirlama degeri en az 16 karakter olmali.')
+            conn.execute('CREATE TABLE IF NOT EXISTS owner_migrations (name TEXT PRIMARY KEY)')
+            marker = 'founder-password-reset-20261121-v2'
+            done = conn.execute('SELECT 1 FROM owner_migrations WHERE name=?', (marker,)).fetchone()
+            if not done:
+                conn.execute('UPDATE users SET password_hash=?, active=1 WHERE id=?',
+                             (hash_password(reset_password), row['id']))
+                conn.execute('DELETE FROM login_attempts WHERE username=?', (owner_username,))
+                conn.execute('DELETE FROM sessions WHERE user_id=?', (row['id'],))
+                conn.execute('INSERT INTO owner_migrations(name) VALUES (?)', (marker,))
+                print('MEGA_FOUNDER_RESET_APPLIED=1', flush=True)
+"""
+s = s.replace(needle, reset_block + needle)
 p.write_text(s, encoding='utf-8')
 print('Owner login and one-shot migration patch applied')
