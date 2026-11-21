@@ -29,5 +29,15 @@ s = s.replace(needle, fix + needle)
 needle = "(owner_username, hash_password(initial_password), 'owner', now_utc()))"
 assert s.count(needle) == 1, 'Unexpected owner insert source'
 s = s.replace(needle, needle + "\n            conn.execute('DELETE FROM login_attempts WHERE username=?', (owner_username,))")
+# Verify the stored founder account against Render settings without leaking credentials.
+needle = "            conn.execute('DELETE FROM login_attempts WHERE username=?', (owner_username,))\n"
+assert s.count(needle) == 1, 'Unexpected owner bootstrap ending'
+diag = """        owner_record = conn.execute('SELECT username, password_hash, active FROM users WHERE role="owner" LIMIT 1').fetchone()
+        print('MEGA_OWNER_READINESS username_match=%s password_match=%s active=%s' % (
+            bool(owner_record and owner_record['username'] == owner_username),
+            bool(owner_record and initial_password and verify_password(initial_password, owner_record['password_hash'])),
+            bool(owner_record and owner_record['active'])), flush=True)
+"""
+s = s.replace(needle, needle + diag)
 p.write_text(s, encoding='utf-8')
 print('Owner login and one-shot migration patch applied')
