@@ -1,0 +1,22 @@
+# MEGA FAV - Render Blueprint
+# Uses a paid instance with a persistent disk so SQLite data survives deploys.
+services:
+  - type: web
+    name: mega-fav-panel
+    runtime: docker
+    region: frankfurt
+    plan: starter
+    healthCheckPath: /healthz
+    disk:
+      name: mega-fav-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: MEGA_DB_PATH
+        value: /data/mega.db
+      - key: MEGA_COOKIE_SECURE
+        value: '1'
+      - key: MEGA_OWNER_USERNAME
+        value: kurucu
+      - key: MEGA_OWNER_PASSWORD
+        sync: false
