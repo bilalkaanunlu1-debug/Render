@@ -183,8 +183,16 @@ def _state(db_path):
             'interval': POLL_MINUTES}
 
 
-def list_feed_context(db_path, period='', q='', page=1, max_per_page=50):
-    task_period, selected_day = active_task()
+def list_feed_context(db_path, period='', q='', page=1, max_per_page=50, day=''):
+    task_period, today = active_task()
+    selected_day = today
+    if day:
+        try:
+            requested = date.fromisoformat(day)
+            if today - timedelta(days=180) <= requested <= today:
+                selected_day = requested
+        except ValueError:
+            pass
     start, end = _date_bounds(selected_day)
     clauses = ['posted_at >= ?', 'posted_at < ?']
     args = [start, end]
@@ -202,7 +210,8 @@ def list_feed_context(db_path, period='', q='', page=1, max_per_page=50):
                               ORDER BY posted_at DESC LIMIT ? OFFSET ?""",
                             args + [max_per_page, (page - 1) * max_per_page]).fetchall()
     return {'x_posts': posts, 'x_total': total, 'x_has_next': page * max_per_page < total,
-            'task_period': task_period, 'x_sync': _state(db_path), 'x_selected_day': selected_day.isoformat()}
+            'task_period': task_period, 'x_sync': _state(db_path),
+            'x_selected_day': selected_day.isoformat(), 'x_today': today.isoformat()}
 
 
 def dashboard_stats(db_path, active_members):
@@ -213,7 +222,11 @@ def dashboard_stats(db_path, active_members):
                                       SUM(CASE WHEN like_count IS NOT NULL THEN 1 ELSE 0 END) AS metric_count
                                 FROM x_list_posts WHERE posted_at >= ? AND posted_at < ?""", (start,end)).fetchone()
     count = result['n'] or 0
-    return {'x_today_count': count,
+    with _connect(db_path) as con:
+        recent = con.execute('''SELECT post_id,url,x_handle,period,posted_at,imported_at
+                                FROM x_list_posts ORDER BY imported_at DESC,post_id DESC LIMIT 15''').fetchall()
+        saved_total = con.execute('SELECT COUNT(*) FROM x_list_posts').fetchone()[0]
+    return {'x_today_count': count, 'x_saved_total': saved_total, 'x_recent_posts': recent,
             'x_posts_per_member': round(count / active_members, 2) if active_members else 0,
             'x_avg_likes': round(result['avg_likes'], 1) if result['metric_count'] else None,
             'x_sync': _state(db_path)}
