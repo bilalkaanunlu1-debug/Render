@@ -7,7 +7,7 @@ import re
 import sqlite3
 from datetime import datetime, timezone, timedelta
 from urllib.parse import urlsplit
-from x_list_sync import _connect, period_for_timestamp
+from x_list_sync import _connect, period_for_timestamp, TR
 
 URL_RE = re.compile(r"https?://[^\s<>\"']+", re.I)
 POST_RE = re.compile(
@@ -56,6 +56,7 @@ def import_free_urls(db_path, supplied, period=''):
     checked = set()
     inserted = duplicates = excluded = invalid = 0
     now_iso = datetime.now(timezone.utc).isoformat(timespec='seconds')
+    chosen_day = datetime.now(TR).date().isoformat() if selected else None
     with _connect(db_path) as db:
         for raw in matches:
             parsed = _from_url(raw)
@@ -73,18 +74,18 @@ def import_free_urls(db_path, supplied, period=''):
                 continue
             result = db.execute(
                 """INSERT OR IGNORE INTO x_list_posts
-                   (post_id,url,x_handle,period,posted_at,like_count,imported_at)
-                   VALUES (?,?,?,?,?,NULL,?)""",
+                   (post_id,url,x_handle,period,posted_at,like_count,imported_at,task_day)
+                   VALUES (?,?,?,?,?,NULL,?,?)""",
                 (post_id, canonical, handle, assigned_period,
-                 posted.isoformat(timespec='seconds'), now_iso))
+                 posted.isoformat(timespec='seconds'), now_iso, chosen_day))
             if result.rowcount:
                 inserted += 1
             else:
                 duplicates += 1
                 # Explicit selection lets a manager correct the task period.
                 if selected:
-                    db.execute('UPDATE x_list_posts SET period=? WHERE post_id=?',
-                               (selected, post_id))
+                    db.execute('UPDATE x_list_posts SET period=?, task_day=? WHERE post_id=?',
+                               (selected, chosen_day, post_id))
     if inserted == 0 and duplicates == 0 and excluded == 0 and invalid:
         raise ValueError('Hiçbir gönderi eklenmedi. X gönderisinin status/... bağlantısını kopyala; liste ve profil adresleri kabul edilmez.')
     return {'inserted': inserted, 'duplicates': duplicates,
