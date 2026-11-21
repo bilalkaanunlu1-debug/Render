@@ -9,9 +9,9 @@ from datetime import datetime, timezone, timedelta
 from urllib.parse import urlsplit
 from x_list_sync import _connect, period_for_timestamp
 
-URL_RE = re.compile(r'https?://[^\\s<>"\\']+', re.I)
+URL_RE = re.compile(r"https?://[^\s<>\"']+", re.I)
 POST_RE = re.compile(
-    r'^/(?:(?P<handle>[A-Za-z0-9_]{1,15})/status|i/web/status)/(?P<post_id>\\d{15,20})/?(?:photo/\\d+|video/\\d+)?/?$',
+    r'^/(?:(?P<handle>[A-Za-z0-9_]{1,15})/status|i/web/status)/(?P<post_id>\d{15,20})/?(?:photo/\d+|video/\d+)?/?$',
     re.I,
 )
 X_EPOCH_MS = 1288834974657
