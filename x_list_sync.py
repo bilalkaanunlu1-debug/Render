@@ -48,6 +48,11 @@ def init_x_tables(db_path):
         );
         INSERT OR IGNORE INTO x_sync_state(id) VALUES (1);
         """)
+        # Existing deployments need this additive migration for manually selected daily tasks.
+        columns = {row['name'] for row in con.execute('PRAGMA table_info(x_list_posts)')}
+        if 'task_day' not in columns:
+            con.execute('ALTER TABLE x_list_posts ADD COLUMN task_day TEXT')
+        con.execute('CREATE INDEX IF NOT EXISTS idx_x_posts_task_day ON x_list_posts(task_day,period)')
 
 
 def period_for_timestamp(posted):
@@ -194,8 +199,8 @@ def list_feed_context(db_path, period='', q='', page=1, max_per_page=50, day='')
         except ValueError:
             pass
     start, end = _date_bounds(selected_day)
-    clauses = ['posted_at >= ?', 'posted_at < ?']
-    args = [start, end]
+    clauses = ['(task_day = ? OR (task_day IS NULL AND posted_at >= ? AND posted_at < ?))']
+    args = [selected_day.isoformat(), start, end]
     if period:
         clauses.append('period=?')
         args.append(period)
@@ -207,7 +212,7 @@ def list_feed_context(db_path, period='', q='', page=1, max_per_page=50, day='')
         total = con.execute('SELECT COUNT(*) FROM x_list_posts WHERE ' + where, args).fetchone()[0]
         posts = con.execute("""SELECT post_id,url,x_handle,period,posted_at,like_count
                               FROM x_list_posts WHERE """ + where + """
-                              ORDER BY posted_at DESC LIMIT ? OFFSET ?""",
+                              ORDER BY posted_at ASC, post_id ASC LIMIT ? OFFSET ?""",
                             args + [max_per_page, (page - 1) * max_per_page]).fetchall()
     return {'x_posts': posts, 'x_total': total, 'x_has_next': page * max_per_page < total,
             'task_period': task_period, 'x_sync': _state(db_path),
@@ -220,12 +225,12 @@ def dashboard_stats(db_path, active_members):
     with _connect(db_path) as con:
         result = con.execute("""SELECT COUNT(*) AS n, AVG(like_count) AS avg_likes,
                                       SUM(CASE WHEN like_count IS NOT NULL THEN 1 ELSE 0 END) AS metric_count
-                                FROM x_list_posts WHERE posted_at >= ? AND posted_at < ?""", (start,end)).fetchone()
+                                FROM x_list_posts WHERE task_day = ? OR (task_day IS NULL AND posted_at >= ? AND posted_at < ?)""", (today.isoformat(),start,end)).fetchone()
     count = result['n'] or 0
     with _connect(db_path) as con:
-        recent_rows = con.execute('''SELECT post_id,url,x_handle,period,posted_at,imported_at
+        recent_rows = con.execute('''SELECT post_id,url,x_handle,period,posted_at,imported_at,task_day
                                      FROM x_list_posts ORDER BY imported_at DESC,post_id DESC LIMIT 15''').fetchall()
-        recent = [dict(row, local_day=datetime.fromisoformat(row['posted_at'].replace('Z', '+00:00')).astimezone(TR).date().isoformat()) for row in recent_rows]
+        recent = [dict(row, local_day=(row['task_day'] or datetime.fromisoformat(row['posted_at'].replace('Z', '+00:00')).astimezone(TR).date().isoformat())) for row in recent_rows]
         saved_total = con.execute('SELECT COUNT(*) FROM x_list_posts').fetchone()[0]
     return {'x_today_count': count, 'x_saved_total': saved_total, 'x_recent_posts': recent,
             'x_posts_per_member': round(count / active_members, 2) if active_members else 0,
