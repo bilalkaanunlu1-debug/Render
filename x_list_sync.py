@@ -164,7 +164,11 @@ def start_x_poller(db_path):
     def worker():
         time.sleep(3)
         while True:
-            sync_once(db_path)
+            status = sync_once(db_path)
+            if status.get('ok'):
+                print('MEGA_X_SYNC_OK imported=' + str(status.get('imported', 0)), flush=True)
+            else:
+                print('MEGA_X_SYNC_FAILED reason=' + str(status.get('reason', 'Bilinmeyen hata'))[:180], flush=True)
             time.sleep(POLL_MINUTES * 60)
     threading.Thread(target=worker, name='x-list-read-only-sync', daemon=True).start()
 
